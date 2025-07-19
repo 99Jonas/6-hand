@@ -552,10 +552,10 @@ def game_logic(room_code):
             if bid.bid > highest_bid:
                 highest_bid = bid.bid
                 high = bid
-        bid_index = bids.index(high)
+        bid_index = (bids.index(high) + begin) % 6
         rooms[room_code]["game_state"]["bids"] = ["" if x != bid_index else rooms[room_code]["game_state"]["bids"][x] for x in range(6)]
         render(room_code)
-        start = bids.index(high)
+        start = bid_index
         if high.bid > 8:
             high = change_cards(room_code, bid_index)
             shots = []
