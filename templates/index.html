@@ -1,0 +1,1357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>6 Hand</title>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #222;
+      color: white;
+      font-family: sans-serif;
+      overflow-x: hidden;
+    }
+    .top-bar {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      padding: 20px;
+      background: #111;
+    }
+    .top-bar input, .top-bar button {
+      padding: 10px;
+      border-radius: 5px;
+      border: none;
+      font-size: 1em;
+    }
+    .top-bar input {
+      width: 120px;
+    }
+    .top-bar button {
+      background-color: #444;
+      color: white;
+      cursor: pointer;
+    }
+    #playerList {
+      text-align: center;
+      margin-top: 10px;
+      font-size: 1.1em;
+    }
+    .game {
+      position: relative;
+      width: 100vw;
+      height: calc(100vh - 120px);
+    }
+    .hand {
+      position: absolute;
+      bottom: 10px;
+      left: 45%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 10px;
+      z-index: 2;
+    }
+    .card {
+      width: 60px;
+      height: 90px;
+      background: white;
+      color: black;
+      border: 1px solid black;
+      border-radius: 5px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 1.2em;
+      cursor: pointer;
+      user-select: none;
+      position: relative;
+      z-index: 10;
+    }
+    .red-suit {
+      color: red !important;
+    }
+
+    /* 🔵 Unified card back style */
+    .card-back {
+      width: 30px;
+      height: 45px;
+      background: blue;
+      border-radius: 5px;
+      border: 1px solid black;
+      box-shadow: 0 0 5px rgba(0,0,128,0.7);
+      user-select: none;
+    }
+
+    /* 🔹 Horizontal stacking for hand lengths */
+    .info-box .card-back {
+      position: absolute;
+      top: 0;
+    }
+
+    /* 🔸 Vertical stacking for trick stacks */
+    .tricks-stack .card-back {
+      position: relative;
+      width: 40px;
+      height: 60px;
+      background: blue;
+      border: 2px solid white;
+      border-radius: 5px;
+      margin-top: -35px;
+      z-index: 1;
+    }
+
+    /* Hand length stack positions */
+    #length1, #length2, #length3, #length4, #length5 {
+      position: absolute;
+      width: 40px;
+      height: 50px;
+      color: transparent;
+      user-select: none;
+    }
+    #length1 { left: 7.5%; top: 61.5%; }
+    #length2 { left: 17.5%; top: 32%; }
+    #length3 { left: 45%; top: 17%; transform:translateX(-50%);}
+    #length4 { left: 66%; top: 32%; }
+    #length5 { left: 76%; top: 61.5%; }
+
+    .length-stack {
+      position: relative;
+      width: 40px;
+      height: 50px;
+      pointer-events: none;
+    }
+
+    .player-name {
+      position: absolute;
+      font-size: 1em;
+      font-weight: bold;
+      color: white;
+      text-align: center;
+      width: 80px;
+      pointer-events: none;
+    }
+
+    .bids {
+      position: absolute;
+      font-size: 1em;
+      font-weight: normal;
+      color: white;
+      text-align: center;
+      width: 80px;
+      pointer-events: none;
+    }
+
+    .scoring-sidebar {
+      position: fixed;
+      top: 0;
+      right: 0;
+      width: 10vw;
+      min-width: 80px;
+      height: 100vh;
+      background: #111;
+      color: white;
+      font-size: 0.9em;
+      padding: 10px 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      user-select: none;
+      box-shadow: -3px 0 6px rgba(0,0,0,0.7);
+      z-index: 20;
+    }
+
+    .team-names-row {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      padding: 0 10px;
+      font-weight: bold;
+      font-size: 1em;
+      margin-top: 10px;
+      user-select: none;
+    }
+
+    .scores-columns {
+      display: flex;
+      justify-content: space-between;
+      padding: 0 10px;
+      margin-top: 12px;
+    }
+
+    .scores-columns > div {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-weight: normal;
+      font-size: 0.85em;
+      min-width: 30px;
+      text-align: center;
+    }
+
+    .tricks-visual-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 20px;
+      gap: 20px;
+    }
+
+    .tricks-stack {
+      margin-top: 40px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+      min-height: 150px;
+    }
+    .seat-dropdown {
+      display: none;
+    }
+    .square-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 1.5em;
+    background: #444;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+
+  .bid-btn {
+    padding: 10px 16px;
+    background: #555;
+    color: white;
+    font-size: 1em;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  .btn {
+    padding: 10px 16px;
+    background: #555;
+    color: white;
+    font-size: 1em;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  .shoot-btn {
+    padding: 10px 16px;
+    background: #555;
+    color: white;
+    font-size: 1em;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+   audio {
+    display: none;
+  }
+  </style>
+</head>
+<body>
+  <div id="top" class="top-bar" style="display: flex;">
+    <input type="text" id="usernameInput" placeholder="Your Name" />
+    <button onclick="createRoom()">Create Room</button>
+    <input type="text" id="roomCodeInput" placeholder="Enter Code" />
+    <button onclick="joinRoom()">Join Room</button>
+  </div>
+
+  <div id="startGameContainer" style="text-align:center; padding: 10px;">
+    <button id="startGameButton" onclick="startGame()" style="display:none;">
+      Start Game
+    </button>
+  </div>
+
+  <div id="resetGameContainer" style="text-align:center; padding: 10px;">
+    <button id="resetGameButton" style="display:none;">
+      Reset Game
+    </button>
+  </div>
+
+
+  <div class="game">
+    <!-- Play positions -->
+    <div id="play1" class="play" style="position:absolute; left:15%; bottom:30%;"></div>
+    <div id="play2" class="play" style="position:absolute; left:25%; top:30%;"></div>
+    <div id="play3" class="play" style="position:absolute; left:45%; top:25%; transform:translateX(-50%);"></div>
+    <div id="play4" class="play" style="position:absolute; right:35%; top:30%;"></div>
+    <div id="play5" class="play" style="position:absolute; right:25%; bottom:30%;"></div>
+    <div id="play6" class="play" style="position:absolute; left:45%; bottom:15%; transform:translateX(-50%);"></div>
+
+    <!-- Hand length stacks in original positions -->
+    <div id="length1" class="info-box"></div>
+    <div id="length2" class="info-box"></div>
+    <div id="length3" class="info-box"></div>
+    <div id="length4" class="info-box"></div>
+    <div id="length5" class="info-box"></div>
+
+    <!-- Player seat 1 -->
+    <div id="name1" class="player-name" style="left: 7.5%; top:56.5%;"></div>
+    <select id="drop1" class="seat-dropdown" style="position:absolute; left: 7.5%; top:56.5%;"></select>
+
+    <!-- Player seat 2 -->
+    <div id="name2" class="player-name" style="left: 17.5%; top:27%;"></div>
+    <select id="drop2" class="seat-dropdown" style="position:absolute; left: 17.5%; top:27%;"></select>
+
+    <!-- Player seat 3 -->
+    <div id="name3" class="player-name" style="left: 45%; top: 12%; transform:translateX(-50%);"></div>
+    <select id="drop3" class="seat-dropdown" style="position:absolute; left: 45%; top: 12%; transform:translateX(-50%);"></select>
+
+    <!-- Player seat 4 -->
+    <div id="name4" class="player-name" style="left: 66%; top: 27%;"></div>
+    <select id="drop4" class="seat-dropdown" style="position:absolute; left: 66%; top: 27%;"></select>
+
+    <!-- Player seat 5 -->
+    <div id="name5" class="player-name" style="left: 76%; top: 56.5%;"></div>
+    <select id="drop5" class="seat-dropdown" style="position:absolute; left: 76%; top: 56.5%;"></select>
+
+    <!-- bids placeholders -->
+    <div id="bid1" class="bids" style="left: 12.5%; top:56.5%;"></div>
+    <div id="bid2" class="bids" style="left: 22.5%; top:27%;"></div>
+    <div id="bid3" class="bids" style="left: 49%; top: 12%; transform:translateX(-50%);"></div>
+    <div id="bid4" class="bids" style="left: 71%; top: 27%;"></div>
+    <div id="bid5" class="bids" style="left: 81%; top: 56.5%;"></div>
+    <div id="bid6" class="bids" style="left: 61%; top: 90%;"></div>
+
+    <!-- Player hand -->
+    <div class="hand" id="hand"></div>
+
+    <!-- Scoring Sidebar -->
+    <div id="scoring" class="scoring-sidebar" style="display: none;">
+      <div class="tricks-visual-row">
+        <div class="tricks-stack" id="team1-tricks-viz"></div>
+        <div class="tricks-stack" id="team2-tricks-viz"></div>
+      </div>
+
+      <div class="team-names-row">
+        <div>Us</div>
+        <div>Them</div>
+      </div>
+
+      <div class="scores-columns">
+        <div id="team1score-column"></div>
+        <div id="team2score-column"></div>
+      </div>
+
+    </div>
+  </div>
+  <div id="messageBox" style="position: absolute; bottom: 50%; left: 45%; transform: translateX(-50%); display: none; align-items: flex-end; gap: 10px;">
+    <!-- Textbox -->
+    <div id="textbox" style="width: 300px; height: 50px; background: #333; color: white; border: 1px solid #666; border-radius: 8px; padding: 10px; overflow-y: auto; font-size: 0.9em;"></div>
+  </div>
+  <div id="answerPanel" style="position: absolute; bottom: 45%; left: 45%; transform: translateX(-50%); display: none; align-items: flex-end; gap: 10px;">
+    <input type="text" id="textInput" style="width: 300px; padding: 8px; font-size: 1em; border-radius: 5px;">
+    <button id="submitButton" style="padding: 8px 16px; font-size: 1em; border-radius: 5px;">Submit</button>
+  </div>
+  <div id="biddingPanel" style="position: absolute; bottom: 45%; left: 45%; transform: translateX(-50%); display: none; align-items: flex-end; gap: 10px;">
+
+    <!-- Number Input -->
+    <input id="bidInput" type="number" placeholder="#" style="width: 50px; padding: 8px; font-size: 1em; border-radius: 5px;" />
+
+    <!-- Center Area (Textbox + Buttons) -->
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 10px;">
+
+      <!-- 6 Unicode Buttons -->
+      <div style="display: flex; gap: 8px;">
+        <button class="bid-btn">♦</button>
+        <button class="bid-btn">♥</button>
+        <button class="bid-btn">♣</button>
+        <button class="bid-btn">♠</button>
+        <button class="bid-btn">↑</button>
+        <button class="bid-btn">↓</button>
+        <button id="passButton" class="btn">Pass</button>
+        <button id="shootButton" class="btn">Shoot</button>
+      </div>
+    </div>
+  </div>
+  <div id="shootPanel" style="position: absolute; bottom: 45%; left: 45%; transform: translateX(-50%); display: none; align-items: flex-end; gap: 10px;">
+    <!-- Center Area (Textbox + Buttons) -->
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 10px;">
+      <!-- 6 Unicode Buttons -->
+      <div style="display: flex; gap: 8px;">
+        <button class="shoot-btn">♦</button>
+        <button class="shoot-btn">♥</button>
+        <button class="shoot-btn">♣</button>
+        <button class="shoot-btn">♠</button>
+        <button class="shoot-btn">↑</button>
+        <button class="shoot-btn">↓</button>
+      </div>
+    </div>
+  </div>
+  <div id="mutePanel" style="position: absolute; left: 62.5%; top: 87.5%; display: none; align-items: flex-end; gap: 10px;">
+    <button id="muteBtn" onclick="toggleMute()" style="display:flex;">Mute</button>
+  </div>
+  <script>
+    const socket = io();
+    let isHost = false;
+    let latestPlayers = [];
+    let localStream= null;
+    let isMuted = false;
+    const peers = {};
+    const negotiationInProgress = {};
+    const iceConfig = {
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" } // Free public STUN server
+      ]
+    };
+
+    function createPeerConnection(sid) {
+      const pc = new RTCPeerConnection({
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+      });
+
+      negotiationInProgress[sid] = false;
+
+      // Add transceivers up front to lock m-line order
+      pc.addTransceiver('audio', { direction: 'sendrecv' });
+
+      if (localStream) {
+        localStream.getAudioTracks().forEach(track => {
+          pc.addTrack(track, localStream);
+          console.log(`[addTrack] Sent track: kind=${track.kind}, id=${track.id}, enabled=${track.enabled}`);
+        });
+      }
+
+      pc.onnegotiationneeded = async () => {
+        if (negotiationInProgress[sid]) return;
+
+        negotiationInProgress[sid] = true;
+        console.log(`[negotiationneeded] Triggered for ${sid}`);
+
+        try {
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          socket.emit("signal", {
+            target: sid,
+            signal: pc.localDescription
+          });
+        } catch (err) {
+          console.error("Negotiation failed:", err);
+        } finally {
+          negotiationInProgress[sid] = false;
+        }
+      };
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          socket.emit("signal", {
+            target: sid,
+            signal: { candidate: event.candidate }
+          });
+        }
+      };
+
+      pc.ontrack = (event) => {
+        console.log(`[ontrack] Received track from ${sid}:`, event.track.kind);
+
+        const remoteStream = new MediaStream();
+        remoteStream.addTrack(event.track);
+
+        const audio = new Audio();
+        audio.srcObject = remoteStream;
+        audio.autoplay = true;
+      };
+
+      pc.oniceconnectionstatechange = () => {
+        console.log(`[ICE] Connection with ${sid}:`, pc.iceConnectionState);
+      };
+
+      return pc;
+    }
+
+    function createRoom() {
+      document.getElementById("messageBox").style.display = "flex";
+      document.getElementById("mutePanel").style.display = "flex";
+
+      const username = document.getElementById("usernameInput").value.trim();
+      if (!username) {
+        alert("Please enter a username.");
+        return;
+      }
+
+      socket.emit("create_room", { username: username });
+
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(stream => {
+          localStream = stream;
+
+          // Start muted
+          const audioTrack = localStream.getAudioTracks()[0];
+
+          const muteBtn = document.getElementById("muteBtn");
+          if (muteBtn) {
+            muteBtn.disabled = false;
+            muteBtn.innerText = isMuted ? "Unmute" : "Mute";
+            muteBtn.style.display = "inline-flex";
+          }
+
+          // Attach stream to all existing peers (should be none yet on create)
+          Object.values(peers).forEach(pc => {
+            localStream.getTracks().forEach(track => {
+              pc.addTrack(track, localStream);
+              console.log(`[addTrack] Sent track: kind=${track.kind}, id=${track.id}, enabled=${track.enabled}`);
+            });
+          });
+        })
+        .catch(err => {
+          alert("Could not access microphone: " + err.message);
+        });
+
+      socket.on("user_joined", ({ sid }) => {
+        console.log("User joined:", sid);
+        const pc = createPeerConnection(sid);
+        peers[sid] = pc;
+
+        // 🔽 THIS makes YOU the offerer
+        pc.createOffer()
+          .then(offer => pc.setLocalDescription(offer))
+          .then(() => {
+            socket.emit("signal", {
+              target: sid,
+              signal: pc.localDescription
+            });
+          });
+      });
+
+      // Handle signal from other clients
+      socket.on("signal", async ({ from, signal }) => {
+        console.log("Signal from", from, signal);
+
+        if (!signal) {
+          console.warn("Signal is null or undefined");
+          return;
+        }
+
+        let pc = peers[from];
+        if (!pc) {
+          pc = createPeerConnection(from);
+          peers[from] = pc;
+        }
+
+        try {
+          if (signal.type === "offer" || signal.type === "answer") {
+            if (!signal.sdp) {
+              console.warn("Signal with missing SDP");
+              return;
+            }
+            await pc.setRemoteDescription(new RTCSessionDescription(signal));
+
+            if (signal.type === "offer") {
+              const answer = await pc.createAnswer();
+              await pc.setLocalDescription(answer);
+              socket.emit("signal", {
+                target: from,
+                signal: pc.localDescription
+              });
+            }
+          } else if (signal.candidate) {
+            if (!signal.candidate.candidate) {
+              console.warn("Signal with empty ICE candidate");
+              return;
+            }
+            await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+          } else {
+            console.warn("Signal received with unknown format", signal);
+          }
+        } catch (err) {
+          console.error("Error handling signal:", err);
+        }
+      });
+    }
+
+    function joinRoom() {
+      document.getElementById("messageBox").style.display = "flex";
+      const code = document.getElementById("roomCodeInput").value.trim();
+      const username = document.getElementById("usernameInput").value.trim();
+
+      if (!username) {
+        alert("Please enter a username.");
+        return;
+      }
+
+      socket.emit("join_room", { room_code: code, username: username });
+
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(stream => {
+          localStream = stream;
+
+          const mutePanel = document.getElementById("mutePanel");
+          if (mutePanel) mutePanel.style.display = "flex";
+
+          const muteBtn = document.getElementById("muteBtn");
+          if (muteBtn) {
+            muteBtn.innerText = isMuted ? "Unmute" : "Mute";
+          }
+
+          // Add tracks to any existing peer connections
+          Object.values(peers).forEach(pc => {
+            localStream.getTracks().forEach(track => {
+              pc.addTrack(track, localStream);
+              console.log(`[addTrack] Sent track: kind=${track.kind}, id=${track.id}, enabled=${track.enabled}`);
+            });
+          });
+        })
+        .catch(err => {
+          alert("Could not access microphone: " + err.message);
+        });
+
+      // Listen for new users joining (you'll be the answerer)
+      socket.on("user_joined", ({ sid }) => {
+        console.log("User joined:", sid);
+
+        const pc = createPeerConnection(sid);
+        peers[sid] = pc;
+
+        pc.createOffer()
+          .then(offer => pc.setLocalDescription(offer))
+          .then(() => {
+            socket.emit("signal", {
+              target: sid,
+              signal: pc.localDescription
+            });
+          });
+      });
+
+      // Signal handling (offer, answer, ICE)
+      socket.on("signal", async ({ from, signal }) => {
+        let pc = peers[from];
+        if (!pc) {
+          pc = createPeerConnection(from); // 🟢 addTrack is done *inside* here now
+          peers[from] = pc;
+        }
+
+        try {
+          if (signal.type === "offer" || signal.type === "answer") {
+            await pc.setRemoteDescription(new RTCSessionDescription(signal));
+
+            if (signal.type === "offer") {
+              const answer = await pc.createAnswer();
+              await pc.setLocalDescription(answer);
+              socket.emit("signal", {
+                target: from,
+                signal: pc.localDescription
+              });
+            }
+          } else if (signal.candidate) {
+            await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+          }
+        } catch (err) {
+          console.error("Error handling signal:", err);
+        }
+      });
+    }
+
+    function toggleMute() {
+      if (!localStream) return;
+      const audioTrack = localStream.getAudioTracks()[0];
+      if (!audioTrack) return;
+
+      isMuted = !isMuted;
+      audioTrack.enabled = !isMuted;
+
+      const muteBtn = document.getElementById("muteBtn");
+      if (muteBtn) {
+        muteBtn.innerText = isMuted ? "Unmute" : "Mute";
+      }
+    }
+
+    socket.on("game_started", (seating) => {
+      document.getElementById("scoring").style.display = "flex";
+      document.getElementById("startGameButton").style.display = "none";
+    });
+
+    socket.on("join_success", (data) => {
+      document.getElementById("top").style.display = "none";
+      alert("Joined room: " + data.room_code);
+      isHost = data.is_host;
+
+      if (isHost) {
+        document.getElementById("startGameButton").style.display = "inline-block";
+      } else {
+        document.getElementById("startGameButton").style.display = "none";
+      }
+      updateSeatDropdownAccess();
+    });
+
+    function updateSeatDropdownAccess() {
+      document.querySelectorAll(".seat-dropdown").forEach(dropdown => {
+        dropdown.style.display = isHost ? "inline-block" : "none";
+      });
+    }
+
+    function updateDropdowns(dropdownId, players) {
+      const dropdown = document.getElementById(dropdownId);
+      if (!dropdown) {
+        console.warn("Dropdown not found:", dropdownId);
+        return;
+      }
+
+      // Clear existing options
+      dropdown.innerHTML = '';
+
+      // Add default placeholder option
+      const defaultOption = document.createElement('option');
+      defaultOption.value = '';
+      defaultOption.textContent = '-- Select Player --';
+      dropdown.appendChild(defaultOption);
+
+      // Add each player as an option
+      players.forEach(player => {
+        var newoption = document.createElement("option");
+        newoption.text = player;
+        dropdown.add(newoption);
+      });
+
+      // Show dropdown only for host
+      dropdown.style.display = isHost ? 'inline-block' : 'none';
+    }
+
+    socket.on('player_list', (players) => {
+      for (let i = 0; i < 5; i++) {
+        const dropdown = document.getElementById("drop" + (i + 1)); // drop1 to drop5
+        if (dropdown) {
+          updateDropdowns(dropdown.id, players);
+        } else {
+          console.warn("Dropdown not found for index", i + 1);
+        }
+      }
+    });
+
+    socket.on("bid_now", ({ highest, alreadyShot, mustBid}) => {
+      played = false;
+      document.getElementById("biddingPanel").style.display = "flex";
+      const textbox = document.getElementById("textbox");
+      const bidInput = document.getElementById("bidInput");
+      const shootButton = document.getElementById("shootButton"); // Assume you have a shoot button separately
+      const passButton = document.getElementById("passButton");
+      let shootCount = highest - 8;
+      if (shootCount < 0) {
+        shootCount = 0;
+      }
+      if (mustBid) {
+        highest = 3
+      }
+
+      // Inside the socket.on("bid_now") handler
+      if (mustBid) {
+        passButton.disabled = true;
+        passButton.style.display = "none";
+        passButton.title = "You are the dealer and must bid.";
+      } else {
+        passButton.disabled = false;
+        passButton.style.display = "flex";
+        passButton.title = "";
+      }
+
+      // Set shoot label appropriately
+      const shootLabels = ["Shoot", "Double Shoot", "Triple Shoot"];
+      if (shootCount >= 3) {
+        shootButton.style.display = "none"; // Shooting not allowed anymore
+      } else {
+        shootButton.innerText = shootLabels[shootCount];
+        shootButton.style.display = "inline-block";
+      }
+
+      textbox.innerText = "What do you want to bid?";
+
+      // Pass Button
+      passButton.onclick = () => {
+        if (mustBid) {
+          textbox.innerText = "You are the dealer and must bid.";
+          return;
+        }
+        socket.emit('player_bid', { bid: 0, suit: "Pass" });
+        setTimeout(() => {
+          textbox.innerText = "";
+        }, 3000);
+        document.getElementById("biddingPanel").style.display = "none";
+      };
+
+      // Shoot Button
+      shootButton.onclick = () => {
+        socket.emit('player_bid', { bid: 9 + shootCount, suit: "Shoot" });
+        setTimeout(() => {
+          textbox.innerText = "";
+        }, 3000);
+        document.getElementById("biddingPanel").style.display = "none";
+      };
+
+      // Normal Bid Buttons (diamonds, hearts, etc.)
+      document.querySelectorAll(".bid-btn").forEach(button => {
+        button.onclick = () => {
+          const suit = button.innerText;
+          let bidValue = Number(bidInput.value.trim());
+
+          if (!bidValue || isNaN(bidValue)) {
+            textbox.innerText = "You have to bid something. Try again.";
+            return;
+          }
+
+          if (bidValue <= highest || bidValue > 8) {
+            textbox.innerText = "That bid is illegal. Try again.";
+            return;
+          }
+
+          if (alreadyShot) {
+            textbox.innerText = "You can only shoot or pass since someone already shot.";
+            return;
+          }
+
+          socket.emit('player_bid', { bid: bidValue, suit: suit });
+          setTimeout(() => {
+            textbox.innerText = "";
+          }, 3000);
+          document.getElementById("biddingPanel").style.display = "none";
+        };
+      });
+    });
+
+    socket.on("shoot_now", (data) => {
+      const teammates = data.teammates;
+      let played = false;      // Flag to block further input after finished
+      let step = 0;            // Which teammate we are asking now
+      let cards = 0;           // Total number of cards to remove
+      const answers = {};      // Store answers
+
+      const textbox = document.getElementById("textbox");
+      const handEl = document.getElementById("hand");
+      const answerPanel = document.getElementById("answerPanel");
+      const submitButton = document.getElementById("submitButton");
+      const textInput = document.getElementById("textInput");
+      const shootPanel = document.getElementById("shootPanel");
+
+      // Reset UI and state before starting
+      played = false;
+      step = 0;
+      cards = 0;
+      Object.keys(answers).forEach(k => delete answers[k]);
+      answerPanel.style.display = "flex";
+      shootPanel.style.display = "none";
+      textbox.innerText = "";
+      textInput.value = "";
+      textInput.disabled = false;
+      submitButton.disabled = false;
+
+      // Reset card opacity
+      handEl.querySelectorAll('.card').forEach(card => {
+        card.style.opacity = "1";
+      });
+
+      // Remove any previous click listeners on hand
+      if (handEl.shootClickListener) {
+        handEl.removeEventListener('click', handEl.shootClickListener);
+        handEl.shootClickListener = null;
+      }
+
+      // Remove previous submit handlers
+      if (submitButton.shootHandler) {
+        submitButton.removeEventListener('click', submitButton.shootHandler);
+        submitButton.shootHandler = null;
+      }
+
+      // Ask each teammate how many cards to take
+      function askNextTeammate() {
+        if (step < teammates.length) {
+          const teammate = teammates[step];
+          textbox.innerText = `How many cards do you want from ${teammate}? (Total max 2 cards)`;
+          textInput.value = "";
+          textInput.focus();
+
+          if (submitButton.shootHandler) {
+            submitButton.removeEventListener("click", submitButton.shootHandler);
+          }
+
+          const handler = () => {
+            const input = textInput.value.trim();
+            if (!input || isNaN(input)) {
+              alert("Please enter a valid number.");
+              return;
+            }
+            const num = Number(input);
+            if (num < 0) {
+              alert("Please enter a non-negative number.");
+              return;
+            }
+
+            if (cards + num > 2) {
+              alert("Total cards taken from all teammates cannot exceed 2. Starting over.");
+              // Reset all
+              step = 0;
+              cards = 0;
+              for (const key in answers) delete answers[key];
+              textInput.value = "";
+              submitButton.removeEventListener("click", handler);
+              submitButton.shootHandler = null;
+              askNextTeammate();
+              return;
+            }
+
+            cards += num;
+            answers[teammate] = num;
+            step++;
+            textInput.value = "";
+            submitButton.removeEventListener("click", handler);
+            submitButton.shootHandler = null;
+            askNextTeammate();
+          };
+
+          submitButton.addEventListener("click", handler);
+          submitButton.shootHandler = handler;
+        } else {
+          answerPanel.style.display = "none";
+          if (cards === 0) {
+            // Mark all teammates as 0
+            teammates.forEach(teammate => {
+              answers[teammate] = 0;
+            });
+            answers["rid"] = {};  // empty object, not array
+            chooseTrump();
+          } else {
+            chooseCardsToRemove();
+          }
+        }
+      }
+
+      // Let user click cards to remove
+      function chooseCardsToRemove() {
+        answers["rid"] = [];
+        textbox.innerText = `Select ${cards} card${cards === 1 ? "" : "s"} to get rid of.`;
+
+        let removed = 0;
+
+        // Remove any existing listener first
+        if (handEl.shootClickListener) {
+          handEl.removeEventListener('click', handEl.shootClickListener);
+          handEl.shootClickListener = null;
+        }
+
+        // Define handler
+        const handler = (event) => {
+          if (played) return;
+          if (removed >= cards) return;
+
+          const cardEl = event.target.closest('.card');
+          if (!cardEl) return;
+          if (cardEl.style.opacity === "0.5") return; // already chosen
+
+          // Get card rank and suit
+          const text = cardEl.textContent.trim();
+          const suitSymbol = text.slice(-1);
+          const rank = text.slice(0, -1).trim();
+
+          const playCard = { rank, suit: suitSymbol };
+          answers["rid"].push(playCard);
+
+          cardEl.style.opacity = "0.5"; // Visual feedback
+          removed++;
+
+          if (removed === cards) {
+            // Done selecting cards
+            handEl.removeEventListener('click', handler);
+            handEl.shootClickListener = null;
+            chooseTrump();
+          }
+        };
+
+        handEl.addEventListener('click', handler);
+        handEl.shootClickListener = handler;
+      }
+
+      // Let user pick trump suit
+      function chooseTrump() {
+        textbox.innerText = "Choose the trump suit:";
+        shootPanel.style.display = "flex";
+
+        // Remove all old listeners on trump buttons by cloning
+        document.querySelectorAll(".shoot-btn").forEach(button => {
+          const newBtn = button.cloneNode(true);
+          button.replaceWith(newBtn);
+        });
+
+        // Add new listeners
+        document.querySelectorAll(".shoot-btn").forEach(button => {
+          button.addEventListener("click", () => {
+            const suit = button.innerText.trim();
+            answers["trump"] = suit;
+            shootPanel.style.display = "none";
+            textbox.innerText = "";
+            played = true;
+
+            socket.emit("shoot_ans", answers);
+            setTimeout(() => {
+              textbox.innerText = "";
+            }, 3000);
+          });
+        });
+      }
+
+      // Start the sequence
+      askNextTeammate();
+    });
+
+    socket.on("give_shoot", () => {
+      let played = false;
+      const textbox = document.getElementById("textbox");
+      const handEl = document.getElementById("hand");
+
+      textbox.innerText = "What card do you want to give to your teammate?";
+
+      // Remove old click listener if any
+      if (handEl.giveShootClickListener) {
+        handEl.removeEventListener('click', handEl.giveShootClickListener);
+        handEl.giveShootClickListener = null;
+      }
+
+      // Update cardData on all cards
+      const cards = handEl.querySelectorAll('.card');
+      cards.forEach(cardEl => {
+        const text = cardEl.textContent.trim();
+        const suitSymbol = text.slice(-1);
+        const rank = text.slice(0, -1).trim();
+
+        cardEl.cardData = {
+          rank,
+          suit: suitSymbol // ✅ keep the suit symbol here
+        };
+      });
+
+      handEl.giveShootClickListener = function(event) {
+        if (played) return;
+
+        const cardEl = event.target.closest('.card');
+        if (!cardEl) return;
+
+        const playCard = cardEl.cardData;
+        if (!playCard) return;
+
+        played = true;
+
+        textbox.innerText = `You gave: ${playCard.rank}${playCard.suit}`;
+        socket.emit("give_card", playCard); // ✅ Emits suit as symbol (e.g., "♦")
+        setTimeout(() => {
+          textbox.innerText = "";
+        }, 3000);
+
+        setTimeout(() => {
+          textbox.innerText = "";
+        }, 3000);
+
+        handEl.removeEventListener('click', handEl.giveShootClickListener);
+        handEl.giveShootClickListener = null;
+      };
+
+      handEl.addEventListener('click', handEl.giveShootClickListener);
+    });
+
+    socket.on("winner", ({ winner }) => {
+      const textbox = document.getElementById("textbox");
+      textbox.innerText = `${winner} won the game!`;
+
+      if (isHost) {
+        const resetBtn = document.getElementById("resetGameButton");
+        resetBtn.style.display = "inline-block";
+
+        resetBtn.onclick = () => {
+          resetBtn.style.display = "none";
+
+          // Reset UI elements — show dropdowns
+          for (let i = 1; i <= 5; i++) {
+              const drop = document.getElementById(`drop${i}`);
+              if (drop) drop.style.display = "inline-block";
+
+              const name = document.getElementById(`name${i}`);
+              if (name) name.innerText = "";
+          }
+          document.getElementById("startGameButton").style.display = "flex";
+
+          textbox.innerText = "Assign players to seats.";
+
+          // You can also emit a reset event to the server if needed
+          socket.emit("reset_game");
+        };
+      }
+    });
+
+    socket.on("play_now", ({ x, high, first }) => {
+      const textbox = document.getElementById("textbox");
+      const handEl = document.getElementById("hand");
+      textbox.innerText = "What card do you want to play?";
+
+      let played = false;
+
+      const dic = {
+        "hearts": "♦",
+        "diamonds": "♥",
+        "clubs": "♠",
+        "spades": "♣"
+      };
+
+      const dic1 = {
+        "diamonds": "♦",
+        "hearts": "♥",
+        "spades": "♠",
+        "clubs": "♣"
+      };
+
+      // Update cardData on each card in the hand (keep order)
+      const cards = handEl.querySelectorAll('.card');
+      cards.forEach(cardEl => {
+        const text = cardEl.textContent.trim();
+        const suitSymbol = text.slice(-1);
+        const rank = text.slice(0, -1).trim();
+
+        cardEl.cardData = {
+          rank,
+          suit: suitSymbol
+        };
+      });
+
+      function isLegalPlay(play, hand, first, high, x) {
+        let trumpSuit = dic1[high.suit]
+        if (!first) return true; // No first card means player is leading
+
+        let hasLeft = false;
+        for (let card of hand) {
+          if (card.rank === "J" && dic[high.suit] === card.suit) {
+            hasLeft = true;
+          }
+        }
+        let firstSuit = first.suit;
+        if (first.rank === "J" && dic[high.suit] === first.suit) {
+          firstSuit = high.suit;
+        }
+
+        if (x !== 0) {
+          let handSuit = hand.map(card => {
+            if (card.rank === "J" && card.suit === dic[high.suit]) {
+              return trumpSuit;
+            }
+            return card.suit;
+          });
+
+          if (handSuit.includes(firstSuit)) {
+            if (!(dic[high.suit] === first.suit && first.rank === "J")) {
+              if (dic[high.suit] === play.suit && play.rank === "J" && firstSuit !== dic1[high.suit]) {
+                textbox.innerText = "That is the wrong suit. Try again.";
+                return false;
+              } else {
+                if (play.suit === firstSuit) return true;
+                if (firstSuit === high.suit && play.rank === "J" && dic[high.suit] === play.suit) return true;
+
+                textbox.innerText = "That is the wrong suit. Try again.";
+                return false;
+              }
+            } else {
+              return true;
+            }
+          } else {
+            if (firstSuit !== high.suit) {
+              return true;
+            } else {
+              if (hasLeft) {
+                textbox.innerText = "That is the wrong suit. Try again.";
+                return false;
+              } else {
+                return true;
+              }
+            }
+          }
+        } else {
+          return true;
+        }
+      }
+
+      // Remove any previous click listener to avoid multiple triggers
+      // (Assuming you have access to remove previous listeners or do this once outside this function)
+      // For simplicity, we'll use a named function and remove before adding.
+
+      // We'll store the listener in a property of handEl to manage it:
+      if (handEl.playNowClickListener) {
+        handEl.removeEventListener('click', handEl.playNowClickListener);
+      }
+
+      handEl.playNowClickListener = function(event) {
+        const cardEl = event.target.closest('.card');
+        if (!cardEl) return;
+        if (played) return;
+
+        const playCard = cardEl.cardData;
+        if (!playCard) return;
+
+        // Get current hand data fresh
+        const hand = Array.from(handEl.querySelectorAll('.card')).map(el => el.cardData);
+
+        const legal = isLegalPlay(playCard, hand, first, high, x);
+        if (!legal) return;
+
+        played = true;
+        textbox.innerText = `You played: ${cardEl.textContent.trim()}`;
+        socket.emit("play_card", playCard);
+        setTimeout(() => {
+          textbox.innerText = "";
+        }, 3000); // Delay in milliseconds (1000ms = 1 second)
+      };
+      handEl.addEventListener('click', handEl.playNowClickListener);
+    });
+
+    socket.on("join_failed", (data) => {
+      alert("Join failed: " + data.error);
+    });
+
+    function startGame() {
+      const textbox = document.getElementById("textbox");
+
+      const values = [];
+      for (let i = 1; i <= 5; i++) {
+        const value = document.getElementById(`drop${i}`).value.trim();
+        if (!value) {
+          textbox.innerText = "All player seats must be assigned.";
+          return;
+        }
+        values.push(value);
+      }
+      const allUnique = new Set(values).size === values.length;
+      if (!allUnique) {
+        textbox.innerText = "You can't have a person play two hands.";
+        return;
+      }
+      document.getElementById("startGameButton").style.display = "none";
+      for (let i = 1; i <= 5; i++) {
+        document.getElementById(`drop${i}`).style.display = "none";
+      }
+      textbox.innerText = "";
+      socket.emit("start_game", values);
+    }
+
+    function updateTricksStack(teamId, tricksCount) {
+      const tricksViz = document.getElementById(teamId + "-tricks-viz");
+      tricksViz.innerHTML = "";
+      const maxTricks = 7;
+
+      for (let i = 0; i < maxTricks; i++) {
+        const trickCard = document.createElement("div");
+        trickCard.className = "card-back";
+        if (i >= tricksCount) {
+          trickCard.style.opacity = "0";  // invisible placeholder
+        }
+        tricksViz.appendChild(trickCard);
+      }
+    }
+
+    function updateScoreColumn(columnId, scores) {
+      const columnDiv = document.getElementById(columnId);
+      columnDiv.innerHTML = "";
+      scores.forEach(score => {
+        const scoreDiv = document.createElement("div");
+        scoreDiv.textContent = score;
+        columnDiv.appendChild(scoreDiv);
+      });
+    }
+
+    socket.on("game_state", function(data) {
+      const { scores, tricks, length, hand, plays, players, bids } = data;
+
+      // ✅ Update hand
+      const handDiv = document.getElementById("hand");
+      handDiv.innerHTML = "";
+
+      hand.forEach(card => {
+        const cardDiv = document.createElement("div");
+        cardDiv.className = "card";
+        cardDiv.textContent = card;
+
+        // Parse and save card data
+        const suitSymbol = card.slice(-1);
+        const rank = card.slice(0, -1).trim();
+        cardDiv.cardData = { rank, suit: suitSymbol };
+
+        if (card.includes('♥') || card.includes('♦')) {
+          cardDiv.classList.add('red-suit');
+        }
+
+        handDiv.appendChild(cardDiv);
+      });
+
+      // ✅ Update plays
+      for (let i = 0; i < 6; i++) {
+        const playDiv = document.getElementById("play" + (i + 1));
+        playDiv.innerHTML = "";
+        if (plays[i]) {
+          const cardDiv = document.createElement("div");
+          cardDiv.className = "card";
+          cardDiv.textContent = plays[i];
+          if (plays[i].includes('♥') || plays[i].includes('♦')) {
+            cardDiv.classList.add('red-suit');
+          }
+          playDiv.appendChild(cardDiv);
+        }
+      }
+
+      // ✅ Clear all length containers
+      for (let i = 1; i <= 5; i++) {
+        const lengthDiv = document.getElementById(`length${i}`);
+        lengthDiv.innerHTML = "";
+      }
+
+      // ✅ Render horizontally stacked card backs
+      length.forEach((len, idx) => {
+        const container = document.getElementById(`length${idx + 1}`);
+        const maxCards = len;
+        const overlapPx = 12;
+
+        for (let i = 0; i < maxCards; i++) {
+          const back = document.createElement("div");
+          back.className = "card-back";
+          back.style.left = `${i * overlapPx}px`;
+          back.style.zIndex = i + 1;
+          container.appendChild(back);
+        }
+      });
+
+      // ✅ Update tricks visualization
+      updateTricksStack("team1", tricks.us);
+      updateTricksStack("team2", tricks.them);
+
+      // ✅ Update score columns
+      updateScoreColumn("team1score-column", scores.us);
+      updateScoreColumn("team2score-column", scores.them);
+
+      // ✅ Display player names above their positions
+      if (players) {
+        for (let i = 0; i < players.length; i++) {
+          const nameDiv = document.getElementById("name" + (i + 1));
+          if (nameDiv) {
+            nameDiv.textContent = players[i];
+          }
+        }
+      }
+
+      for (let i = 0; i < 5; i++) {
+        const nameDiv = document.getElementById("name" + (i + 1));
+        const dropdown = document.getElementById("drop" + (i + 1));
+
+        if (dropdown) {
+          // Just update selected option
+          for (const option of dropdown.options) {
+            option.selected = option.value === players[i];
+          }
+        } else if (nameDiv) {
+          // If no dropdown, just show text
+          nameDiv.textContent = players[i];
+        }
+      }
+
+      // Display bids
+      if (bids) {
+        for (let i = 0; i < bids.length; i++) {
+          const bidDiv = document.getElementById("bid" + (i + 1))
+          bidDiv.textContent = bids[i];
+        }
+      }
+    });
+  </script>
+</body>
+</html>
