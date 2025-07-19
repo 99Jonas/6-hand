@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: 6-hand
+    env: python
+    plan: free
+    buildCommand: ""
+    startCommand: "python server.py"
+    region: oregon
+    envVars:
+      - key: FLASK_ENV
+        value: production
