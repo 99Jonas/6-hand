@@ -392,6 +392,7 @@
     let isMuted = false;
     const peers = {};
     const negotiationInProgress = {};
+    const peerConnections = {};
     const iceConfig = {
       iceServers: [
         { urls: "stun:stun.l.google.com:19302" } // Free public STUN server
@@ -675,6 +676,58 @@
       }
       updateSeatDropdownAccess();
     });
+
+    async function retryConnection(socketId) {
+      const oldPC = peerConnections[socketId];
+      if (oldPC) {
+        oldPC.close();
+        delete peerConnections[socketId];
+      }
+    
+      const pc = new RTCPeerConnection(iceConfig);
+      peerConnections[socketId] = pc;
+    
+      // Reuse audio stream
+      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+    
+      // Handle ICE candidates
+      pc.onicecandidate = event => {
+        if (event.candidate) {
+          socket.emit("ice_candidate", {
+            to: socketId,
+            candidate: event.candidate
+          });
+        }
+      };
+    
+      // Add reconnection handler
+      pc.oniceconnectionstatechange = () => {
+        const state = pc.iceConnectionState;
+        console.log(`Retry ICE state with ${socketId}: ${state}`);
+        if (state === "failed" || state === "disconnected") {
+          retryConnection(socketId); // Keep trying
+        }
+      };
+    
+      // Create and send offer
+      const offer = await pc.createOffer({ iceRestart: true });
+      await pc.setLocalDescription(offer);
+      socket.emit("offer", {
+        to: socketId,
+        offer: offer
+      });
+    }
+
+    setInterval(() => {
+      for (const socketId in peerConnections) {
+        const pc = peerConnections[socketId];
+        const state = pc.iceConnectionState;
+        if (state === "failed" || state === "disconnected") {
+          console.log(`Periodic retry for ${socketId}`);
+          retryConnection(socketId);
+        }
+      }
+    }, 10000); // every 10 seconds
 
     function updateSeatDropdownAccess() {
       document.querySelectorAll(".seat-dropdown").forEach(dropdown => {
