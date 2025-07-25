@@ -406,14 +406,16 @@
 
       negotiationInProgress[sid] = false;
 
-      // Add transceivers up front to lock m-line order
-      pc.addTransceiver('audio', { direction: 'sendrecv' });
+      let audioSender;
 
+      const transceiver = pc.addTransceiver('audio', { direction: 'sendrecv' });
+      
       if (localStream) {
-        localStream.getAudioTracks().forEach(track => {
-          pc.addTrack(track, localStream);
-          console.log(`[addTrack] Sent track: kind=${track.kind}, id=${track.id}, enabled=${track.enabled}`);
-        });
+        const audioTrack = localStream.getAudioTracks()[0];
+        if (audioTrack) {
+          transceiver.sender.replaceTrack(audioTrack);
+          audioSender = transceiver.sender;
+        }
       }
 
       pc.onnegotiationneeded = async () => {
